@@ -1,33 +1,48 @@
-# Otimização de Portfólio de Investimentos - Teoria Moderna de Markowitz (Enhanced)
+# Otimização de Portfólio de Investimentos - Teoria Moderna de Markowitz (com versão Machine Learning)
 
-Projeto de Data Science / Quant Finance para portfólio profissional.  
-Demonstra habilidades end-to-end: coleta de dados reais (yfinance + API BCB), otimização matemática (scipy), visualização interativa (Plotly) e deployment (Streamlit).
+Projeto completo de Data Science / Finanças Quantitativas para portfólio profissional.  
+Implementa otimização de portfólio baseada na Teoria Moderna de Portfólios de Harry Markowitz, com dashboard interativo em Streamlit e versão avançada que integra Machine Learning (Random Forest + XGBoost) para prever retornos esperados.
 
-## 🎯 Problema de Negócio
-Como alocar capital entre ações brasileiras para maximizar retorno ajustado ao risco, considerando a taxa Selic real como risco livre, possibilidade de short selling e desempenho histórico vs. Ibovespa?
+**Deploy ao vivo**: [Acesse aqui](https://seu-link-streamlit.app) *(substitua pelo seu link após deploy)*
 
-## 🚀 Funcionalidades
-- Fronteira Eficiente com portfólio de Máximo Sharpe Ratio (ajustado por Selic real)
-- Opção de short selling (pesos negativos)
-- Taxa livre de risco buscada automaticamente via API do BCB (Selic meta)
-- Cálculo de Sortino Ratio (risco downside)
-- Backtesting: retorno cumulativo do portfólio otimizado vs. Ibovespa
-- Dashboard interativo com configurações customizáveis (tickers, período, etc.)
+## 🎯 Visão Geral
+O projeto tem dois módulos integrados em um único app multi-page:
+
+1. **Otimização Clássica (Markowitz)**  
+   - Fronteira Eficiente  
+   - Portfólio de máximo Sharpe Ratio (ajustado pela Selic real)  
+   - Sortino Ratio (risco downside)  
+   - Backtesting vs. Ibovespa  
+   - Análise de drawdown  
+   - Comparação detalhada de métricas (retorno, risco, Sharpe, drawdown)
+
+2. **Otimização com Machine Learning**  
+   - Previsão de retornos futuros por ativo usando Random Forest e XGBoost  
+   - Features técnicas (lags, volatilidade rolling, RSI)  
+   - Validação walk-forward para métricas out-of-sample  
+   - Feature importance média  
+   - Comparação direta: Clássico vs. Random Forest vs. XGBoost (retorno esperado, risco, Sharpe)
+
+## 🚀 Funcionalidades Principais
+- Seleção interativa de ativos brasileiros (pré-lista com ações líquidas + tickers customizados)
+- Configuração de período histórico, benchmark (^BVSP), short selling e taxa livre de risco
+- Gráficos interativos com Plotly (fronteira eficiente, backtesting, drawdown)
+- Tabela comparativa detalhada com destaque de melhorias
+- Regularização forte nos modelos ML para evitar overfitting extremo
+- Resultados realistas e explicáveis (evita previsões absurdas com clip e hiperparâmetros conservadores)
 
 ## 🛠 Tech Stack
-- Python 3
-- Streamlit (dashboard)
-- yfinance (dados de mercado)
-- pandas, numpy, scipy (cálculos e otimização)
-- plotly (gráficos interativos)
-- requests (API Selic)
+- **Python** 3.10+
+- **Streamlit** (dashboard interativo multi-page)
+- **yfinance** (dados de mercado)
+- **pandas, numpy, scipy** (cálculos e otimização)
+- **plotly** (visualizações)
+- **scikit-learn** (Random Forest)
+- **xgboost** (XGBoost)
+- **requests** (API Selic BCB)
 
-## 📊 Resultados Típicos (exemplo com dados até jan/2026)
-- Sharpe Ratio ~1.0–1.5 (melhor que Ibovespa ~0.6–0.9 no período)
-- Retorno anualizado otimizado >15% com volatilidade controlada
-- Backtesting mostra outperformance em períodos de alta diversificação
-
-## 🚀 Como Rodar Localmente
-```bash
-pip install streamlit yfinance pandas numpy scipy plotly requests
-streamlit run app.py
+## 📦 Instalação e Execução Local
+1. Clone o repositório:
+   ```bash
+   git clone https://github.com/seu-usuario/seu-repo-portfolio.git
+   cd seu-repo-portfolio
