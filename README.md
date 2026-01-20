@@ -40,9 +40,3 @@ O projeto tem dois módulos integrados em um único app multi-page:
 - **scikit-learn** (Random Forest)
 - **xgboost** (XGBoost)
 - **requests** (API Selic BCB)
-
-## 📦 Instalação e Execução Local
-1. Clone o repositório:
-   ```bash
-   git clone https://github.com/seu-usuario/seu-repo-portfolio.git
-   cd seu-repo-portfolio
