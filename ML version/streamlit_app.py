@@ -16,7 +16,7 @@ from sklearn.model_selection import TimeSeriesSplit
 st.set_page_config(page_title="Otimização de Portfólio com ML", layout="wide")
 st.title("🚀 Otimização de Portfólio com Machine Learning - Markowitz Enhanced")
 st.markdown("""
-Dashboard separado para versão avançada: compara média histórica vs. Random Forest vs. XGBoost para prever retornos futuros.
+Dashboard separado para versão avançada: compara portfólio clássico (média histórica) vs. Random Forest vs. XGBoost para prever retornos futuros.
 Ambos os modelos usam regularização forte para evitar overfitting extremo.
 Inclui validação walk-forward, feature importance e comparação direta.
 """)
@@ -61,11 +61,14 @@ def download_data_robust(tickers: List[str], benchmark: str, period: str) -> Tup
 
         bench_series = download_single_ticker(benchmark, period)
 
-    if len(valid_prices) < 2:
-        st.error("Menos de 2 ativos válidos.")
+    if len(valid_prices) < 3:  # mínimo para ML robusto
+        st.error(f"Menos de 3 ativos válidos baixados. Falharam: {', '.join(failed_tickers)}")
         st.stop()
 
     prices_df = pd.DataFrame(valid_prices).dropna()
+    if len(prices_df) < 252:
+        st.warning("Dados muito curtos após alinhamento — resultados podem ser instáveis.")
+    
     return prices_df, bench_series, failed_tickers
 
 
@@ -97,82 +100,109 @@ def add_technical_features(prices: pd.Series) -> pd.DataFrame:
     down = down.replace(0, np.nan)
     rsi = 100 - (100 / (1 + up / down))
     features['rsi_14'] = rsi
-    return features.dropna()
+    return features
 
 
 def prepare_ml_data(prices_df: pd.DataFrame, horizon: int = 21) -> Dict[str, pd.DataFrame]:
+    """Prepara dados para ML com tratamento robusto de falhas por ticker."""
     data_dict = {}
+    skipped_tickers = []
+    
     for ticker in prices_df.columns:
-        asset_prices = prices_df[ticker]
-        features = add_technical_features(asset_prices)
-        df = pd.DataFrame(index=features.index)
-        df['target'] = asset_prices.pct_change(horizon).shift(-horizon)
-        df = pd.concat([df, features.add_suffix(f'_{ticker}')], axis=1)
-        df = df.dropna()
-        data_dict[ticker] = df
+        try:
+            asset_prices = prices_df[ticker]
+            features = add_technical_features(asset_prices)
+            
+            df = pd.DataFrame(index=features.index)
+            df['target'] = asset_prices.pct_change(horizon).shift(-horizon)
+            
+            df = pd.concat([df, features.add_suffix(f'_{ticker}')], axis=1)
+            df = df.dropna()
+            
+            if len(df) < 100:
+                skipped_tickers.append(ticker)
+                continue
+                
+            data_dict[ticker] = df
+        except Exception:
+            skipped_tickers.append(ticker)
+    
+    if skipped_tickers:
+        st.info(f"Alguns ativos foram omitidos do processamento ML devido a dados insuficientes: {', '.join(skipped_tickers)}")
+    
+    if len(data_dict) < 3:
+        st.error("Menos de 3 ativos válidos para ML após processamento. Ajuste tickers/período.")
+        st.stop()
+    
     return data_dict
 
 
 @st.cache_resource
 def train_models(data_dict: Dict[str, pd.DataFrame]) -> Tuple[Dict, Dict, Dict, Dict]:
-    """Treina RandomForest e XGBoost por ativo com regularização."""
     rf_models = {}
     xgb_models = {}
     rf_metrics = {}
     xgb_metrics = {}
     
     for ticker, df in data_dict.items():
-        X = df.drop('target', axis=1)
-        y = df['target']
-        
-        tscv = TimeSeriesSplit(n_splits=5)
-        
-        # Random Forest com regularização
-        rf = RandomForestRegressor(
-            n_estimators=100, max_depth=6, min_samples_leaf=20,
-            random_state=42, n_jobs=-1
-        )
-        rf_maes, rf_r2s = [], []
-        for train_idx, test_idx in tscv.split(X):
-            rf.fit(X.iloc[train_idx], y.iloc[train_idx])
-            pred = rf.predict(X.iloc[test_idx])
-            rf_maes.append(mean_absolute_error(y.iloc[test_idx], pred))
-            rf_r2s.append(r2_score(y.iloc[test_idx], pred))
-        rf.fit(X, y)
-        rf_models[ticker] = rf
-        rf_metrics[ticker] = {'MAE': np.mean(rf_maes), 'R2': np.mean(rf_r2s)}
-        
-        # XGBoost com regularização
-        xgb = XGBRegressor(
-            n_estimators=100, max_depth=4, learning_rate=0.05,
-            subsample=0.8, colsample_bytree=0.8, random_state=42
-        )
-        xgb_maes, xgb_r2s = [], []
-        for train_idx, test_idx in tscv.split(X):
-            xgb.fit(X.iloc[train_idx], y.iloc[train_idx])
-            pred = xgb.predict(X.iloc[test_idx])
-            xgb_maes.append(mean_absolute_error(y.iloc[test_idx], pred))
-            xgb_r2s.append(r2_score(y.iloc[test_idx], pred))
-        xgb.fit(X, y)
-        xgb_models[ticker] = xgb
-        xgb_metrics[ticker] = {'MAE': np.mean(xgb_maes), 'R2': np.mean(xgb_r2s)}
+        try:
+            X = df.drop('target', axis=1)
+            y = df['target']
+            
+            tscv = TimeSeriesSplit(n_splits=min(5, len(X)//50))
+            
+            # Random Forest regularizado
+            rf = RandomForestRegressor(
+                n_estimators=100, max_depth=6, min_samples_leaf=20,
+                random_state=42, n_jobs=-1
+            )
+            rf_maes, rf_r2s = [], []
+            for train_idx, test_idx in tscv.split(X):
+                rf.fit(X.iloc[train_idx], y.iloc[train_idx])
+                pred = rf.predict(X.iloc[test_idx])
+                rf_maes.append(mean_absolute_error(y.iloc[test_idx], pred))
+                rf_r2s.append(r2_score(y.iloc[test_idx], pred))
+            rf.fit(X, y)
+            rf_models[ticker] = rf
+            rf_metrics[ticker] = {'MAE': np.mean(rf_maes) if rf_maes else np.nan, 'R2': np.mean(rf_r2s) if rf_r2s else np.nan}
+            
+            # XGBoost regularizado
+            xgb = XGBRegressor(
+                n_estimators=100, max_depth=4, learning_rate=0.05,
+                subsample=0.8, colsample_bytree=0.8, random_state=42
+            )
+            xgb_maes, xgb_r2s = [], []
+            for train_idx, test_idx in tscv.split(X):
+                xgb.fit(X.iloc[train_idx], y.iloc[train_idx])
+                pred = xgb.predict(X.iloc[test_idx])
+                xgb_maes.append(mean_absolute_error(y.iloc[test_idx], pred))
+                xgb_r2s.append(r2_score(y.iloc[test_idx], pred))
+            xgb.fit(X, y)
+            xgb_models[ticker] = xgb
+            xgb_metrics[ticker] = {'MAE': np.mean(xgb_maes) if xgb_maes else np.nan, 'R2': np.mean(xgb_r2s) if xgb_r2s else np.nan}
+        except Exception:
+            continue
     
     return rf_models, xgb_models, rf_metrics, xgb_metrics
 
 
 def get_ml_expected_returns(models: Dict[str, object], data_dict: Dict[str, pd.DataFrame], horizon: int) -> pd.Series:
     expected = {}
-    for ticker, df in data_dict.items():
-        X_latest = df.drop('target', axis=1).iloc[-1:]
-        pred_horizon = models[ticker].predict(X_latest)[0]
-        
-        if pred_horizon > -1:
-            annual_pred = (1 + pred_horizon) ** (252 / horizon) - 1
-        else:
-            annual_pred = pred_horizon * (252 / horizon)
-        
-        annual_pred = np.clip(annual_pred, -0.5, 1.0)
-        expected[ticker] = annual_pred
+    for ticker in data_dict.keys():
+        try:
+            df = data_dict[ticker]
+            X_latest = df.drop('target', axis=1).iloc[-1:]
+            pred_horizon = models[ticker].predict(X_latest)[0]
+            
+            if pred_horizon > -1:
+                annual_pred = (1 + pred_horizon) ** (252 / horizon) - 1
+            else:
+                annual_pred = pred_horizon * (252 / horizon)
+            
+            annual_pred = np.clip(annual_pred, -0.5, 1.0)
+            expected[ticker] = annual_pred
+        except Exception:
+            expected[ticker] = 0.0
     return pd.Series(expected)
 
 
@@ -193,10 +223,10 @@ def optimize_portfolio(mean_returns: pd.Series, cov_matrix: pd.DataFrame, risk_f
                       initial, method='SLSQP', bounds=bounds, constraints=constraints)
     
     if not result.success:
-        st.error("Otimização falhou.")
-        st.stop()
+        weights = initial / initial.sum()
+    else:
+        weights = result.x
     
-    weights = result.x
     ret, risk, sharpe = portfolio_performance(weights, mean_returns, cov_matrix, risk_free_rate)
     return weights, ret, risk, sharpe
 
@@ -227,27 +257,36 @@ with st.sidebar.expander("📊 Parâmetros"):
 # ==============================
 prices_df, bench_series, failed = download_data_robust(selected_tickers, benchmark, period)
 if failed:
-    st.warning(f"Falharam: {', '.join(failed)}")
+    st.info(f"Alguns ativos não puderam ser baixados e foram omitidos: {', '.join(failed)}")
 
 returns, bench_returns, hist_mean, cov_matrix = calculate_returns(prices_df, bench_series)
 
+# ML
 data_dict = prepare_ml_data(prices_df, horizon)
 rf_models, xgb_models, rf_metrics, xgb_metrics = train_models(data_dict)
 
-st.subheader("📊 Qualidade dos Modelos (walk-forward)")
-col_rf, col_xgb = st.columns(2)
-with col_rf:
-    st.write("**Random Forest**")
-    st.table(pd.DataFrame(rf_metrics).T.style.format({"MAE": "{:.4f}", "R2": "{:.4f}"}))
-with col_xgb:
-    st.write("**XGBoost**")
-    st.table(pd.DataFrame(xgb_metrics).T.style.format({"MAE": "{:.4f}", "R2": "{:.4f}"}))
+# Qualidade dos modelos
+if rf_models or xgb_models:
+    st.subheader("📊 Qualidade dos Modelos (walk-forward)")
+    col_rf, col_xgb = st.columns(2)
+    with col_rf:
+        if rf_metrics:
+            st.write("**Random Forest**")
+            st.table(pd.DataFrame(rf_metrics).T.style.format({"MAE": "{:.4f}", "R2": "{:.4f}"}))
 
-# Expected returns
-rf_mean = get_ml_expected_returns(rf_models, data_dict, horizon)
-xgb_mean = get_ml_expected_returns(xgb_models, data_dict, horizon)
+    with col_xgb:
+        if xgb_metrics:
+            st.write("**XGBoost**")
+            st.table(pd.DataFrame(xgb_metrics).T.style.format({"MAE": "{:.4f}", "R2": "{:.4f}"}))
 
-# Otimização
+    # Expected returns
+    rf_mean = get_ml_expected_returns(rf_models, data_dict, horizon) if rf_models else hist_mean
+    xgb_mean = get_ml_expected_returns(xgb_models, data_dict, horizon) if xgb_models else hist_mean
+else:
+    rf_mean = xgb_mean = hist_mean
+    st.info("Modelos ML não foram treinados — usando média histórica para todas as comparações.")
+
+# Otimização comparativa
 st.subheader("🔄 Comparação Completa")
 
 col_classic, col_rf, col_xgb = st.columns(3)
@@ -258,7 +297,7 @@ with col_classic:
     st.metric("Retorno Esperado", f"{ret_hist:.2%}")
     st.metric("Risco", f"{risk_hist:.2%}")
     st.metric("Sharpe Ratio", f"{sharpe_hist:.2f}")
-    st.bar_chart(pd.Series(w_hist, index=selected_tickers).round(4) * 100)
+    st.bar_chart(pd.Series(w_hist, index=prices_df.columns).round(4) * 100)
 
 with col_rf:
     st.write("**Random Forest**")
@@ -266,7 +305,7 @@ with col_rf:
     st.metric("Retorno Esperado", f"{ret_rf:.2%}")
     st.metric("Risco", f"{risk_rf:.2%}")
     st.metric("Sharpe Ratio", f"{sharpe_rf:.2f}")
-    st.bar_chart(pd.Series(w_rf, index=selected_tickers).round(4) * 100)
+    st.bar_chart(pd.Series(w_rf, index=prices_df.columns).round(4) * 100)
 
 with col_xgb:
     st.write("**XGBoost**")
@@ -274,7 +313,4 @@ with col_xgb:
     st.metric("Retorno Esperado", f"{ret_xgb:.2%}")
     st.metric("Risco", f"{risk_xgb:.2%}")
     st.metric("Sharpe Ratio", f"{sharpe_xgb:.2f}")
-    st.bar_chart(pd.Series(w_xgb, index=selected_tickers).round(4) * 100)
-
-st.warning("⚠️ Previsões de ML em finanças são desafiadoras. Modelos regularizados evitam extremos, mas resultados variam por período.")
-st.caption("XGBoost adicionado com regularização (max_depth=4, learning_rate=0.05). Ambos modelos leves para Streamlit Cloud.")
+    st.bar_chart(pd.Series(w_xgb, index=prices_df.columns).round(4) * 100)
