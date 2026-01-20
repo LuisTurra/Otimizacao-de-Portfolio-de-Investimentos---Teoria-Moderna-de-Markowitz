@@ -314,7 +314,24 @@ with st.sidebar.expander("⚖️ Parâmetros Avançados"):
     )
 
 # ==============================
-# PROCESSAMENTO
+# ADIÇÃO: NAVEGAÇÃO CUSTOMIZADA 
+# ==============================
+st.sidebar.markdown("---") 
+st.sidebar.subheader("🌐 Navegação entre Módulos")
+page = st.sidebar.radio(
+    "Escolha o módulo:",
+    ["Otimização Clássica (Markowitz)", "Otimização com Machine Learning"],
+    index=0
+)
+
+if page == "Otimização com Machine Learning":
+    st.info("🔄 Você está na versão clássica. A versão com Machine Learning (Random Forest + XGBoost) está disponível como página separada.")
+    st.markdown("👉 **Acesse diretamente:** Use o menu lateral automático do Streamlit ou clique no link abaixo:")
+    st.markdown("[Ir para Versão com Machine Learning](/pages/ml_enhanced.py)")  
+    st.stop()  # para o processamento aqui e evita rodar o código clássico desnecessariamente
+
+# ==============================
+# PROCESSAMENTO 
 # ==============================
 prices_df, bench_series, failed_tickers = download_data_robust(selected_tickers, benchmark, period)
 
@@ -369,7 +386,7 @@ col3, col4 = st.columns(2)
 with col3:
     st.plotly_chart(create_drawdown_plot(port_cum, bench_cum, port_max_dd, bench_max_dd), use_container_width=True)
 with col4:
-    st.empty()  # espaço reservado se quiser adicionar outro gráfico no futuro
+    st.empty()  
 
 st.header("📊 Comparação Detalhada: Portfólio Otimizado vs. Benchmark")
 
@@ -398,4 +415,4 @@ weights_df = weights_df.round(2)
 weights_df = weights_df[weights_df.abs() > 0.5].sort_values(ascending=False)
 st.bar_chart(weights_df)
 
-st.caption("Projeto desenvolvido para demonstração de habilidades em Finanças Quantitativas e Data Science.")
+st.caption("Projeto desenvolvido para demonstração de habilidades em Finanças Quantitativas e Ciência de Dados.")
