@@ -3,7 +3,7 @@
 Projeto completo de Data Science / Finanças Quantitativas para portfólio profissional.  
 Implementa otimização de portfólio baseada na Teoria Moderna de Portfólios de Harry Markowitz, com dashboard interativo em Streamlit e versão avançada que integra Machine Learning (Random Forest + XGBoost) para prever retornos esperados.
 
-**Deploy ao vivo**: [Acesse aqui](https://seu-link-streamlit.app) *(substitua pelo seu link após deploy)*
+**Deploy ao vivo**: [Acesse aqui] https://luisturra-otimizacao-de-portfolio-de-inves-streamlit-app-4bj7xl.streamlit.app/
 
 ## 🎯 Visão Geral
 O projeto tem dois módulos integrados em um único app multi-page:
